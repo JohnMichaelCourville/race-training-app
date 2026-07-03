@@ -61,7 +61,7 @@ function buildSchedule(daysPerWeek, startDate) {
   const targetDays = dayMaps[daysPerWeek] || dayMaps[4];
   const schedule = [];
   let cursor = new Date(startDate); cursor.setHours(0,0,0,0);
-  while (schedule.length < 60) {
+  while (schedule.length < 45) {
     if (cursor >= RACE_DAY) break;
     if (targetDays.includes(cursor.getDay())) schedule.push(new Date(cursor));
     cursor = addDays(cursor, 1);
@@ -201,14 +201,23 @@ const FEEL_COLS = ["#c0392b","#e67e22","#27ae60","#2980b9"];
 
 // ── API call ───────────────────────────────────────────────────────────────
 async function callClaude(prompt) {
-  const res = await fetch("/api/generate-plan", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ prompt }),
-  });
-  const data = await res.json();
-  const text = data.text || "[]";
-  try { return JSON.parse(text.replace(/```json|```/g,"").trim()); }
-  catch { return null; }
+  try {
+    console.log("callClaude: firing API request");
+    const res = await fetch("/api/generate-plan", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ prompt }),
+    });
+    console.log("callClaude: got response", res.status);
+    const data = await res.json();
+    console.log("callClaude: data", JSON.stringify(data).slice(0, 200));
+    const text = data.text || "[]";
+    const parsed = JSON.parse(text.replace(/```json|```/g,"").trim());
+    console.log("callClaude: parsed", Array.isArray(parsed) ? parsed.length + " items" : typeof parsed);
+    return parsed;
+  } catch(e) {
+    console.error("callClaude error:", e);
+    return null;
+  }
 }
 
 // ── Generate initial full plan ─────────────────────────────────────────────
@@ -216,19 +225,23 @@ async function generateInitialPlan({ name, paces, daysPerWeek, assessment, start
   const schedule = buildSchedule(daysPerWeek, startDate || new Date());
   const today = new Date(); today.setHours(0,0,0,0);
 
-  const scheduleText = schedule.map((d, i) => {
+  const scheduleText = scheduleToFill.map((d, i) => {
     const daysOut = dateDiffDays(today, d);
     const daysToRaceVal = dateDiffDays(d, RACE_DAY);
     const isRace = d.getTime() === RACE_DAY.getTime();
     return `Slot ${i+1}: ${formatDate(d)} (${daysOut===0?"TODAY":`in ${daysOut}d`}, ${daysToRaceVal}d to race)${isRace?" ← RACE DAY":""}`;
   }).join("\n");
 
-  const prompt = `You are a running coach. Build a COMPLETE training plan for ${name} for a 2.5-mile race on Sep 11, 2026.
+  // Generate in two halves if too many slots
+  const maxSlots = Math.min(schedule.length, 30);
+  const scheduleToFill = schedule.slice(0, maxSlots);
+
+  const prompt = `You are a running coach. Build a training plan for ${name} for a 2.5-mile race on Sep 11, 2026.
 
 GOAL: finish in ${fmt(paces.goalSecs)} (${paces.racePace} pace)
 TRAINING PACES: easy ${paces.easy} | tempo ${paces.tempo} | race pace ${paces.racePace} | long ${paces.long}
 DAYS PER WEEK: ${daysPerWeek}
-TOTAL SLOTS TO FILL: ${schedule.length}
+TOTAL SLOTS TO FILL: ${maxSlots}
 
 RUNNER ASSESSMENT:
 ${assessment}
@@ -237,16 +250,15 @@ SCHEDULE SLOTS (assign one workout per slot):
 ${scheduleText}
 
 BUILD A COMPLETE OPTIMISTIC PLAN assuming the runner will complete all workouts as prescribed. Progress through these phases:
-- BASE (slots 1-${Math.round(schedule.length*0.25)}): Easy and Long runs only. Build aerobic base.
-- VOLUME (slots ${Math.round(schedule.length*0.25)+1}-${Math.round(schedule.length*0.45)}): Add Tempo runs. Keep majority easy.
-- SPEED (slots ${Math.round(schedule.length*0.45)+1}-${Math.round(schedule.length*0.75)}): Add Intervals. Mix of Easy, Long, Tempo, Intervals.
-- TAPER (slots ${Math.round(schedule.length*0.75)+1}-${schedule.length-4}): Reduce volume, keep sharpness. Easy and short Tempo.
-- RACE WEEK (last 3 slots before race): Easy, Shakeout, then Race.
-- RACE DAY (final slot): always type "Race".
+- BASE (slots 1-${Math.round(maxSlots*0.25)}): Easy and Long runs only.
+- VOLUME (slots ${Math.round(maxSlots*0.25)+1}-${Math.round(maxSlots*0.45)}): Add Tempo runs.
+- SPEED (slots ${Math.round(maxSlots*0.45)+1}-${Math.round(maxSlots*0.75)}): Add Intervals.
+- TAPER (last 4 slots): Reduce volume, keep sharpness.
+- Final slot must be Race Day if Sep 11 is included, otherwise end with Taper.
 
 Adjust phase lengths based on the runner's assessment. If they're experienced, compress Base. If beginner, extend Base.
 
-Return ONLY a raw JSON array with exactly ${schedule.length} entries:
+Return ONLY a raw JSON array with exactly ${maxSlots} entries:
 [{"id":"s1","scheduledDate":"2026-07-04","label":"Fri Jul 4","daysToRace":69,"type":"Easy","desc":"3 mi easy (${paces.easy})","phase":"Base","coachNote":"Starting with easy miles to build your aerobic base."}]`;
 
   const result = await callClaude(prompt);
@@ -254,9 +266,9 @@ Return ONLY a raw JSON array with exactly ${schedule.length} entries:
   // Attach real dates from schedule
   return result.map((w, i) => ({
     ...w,
-    scheduledDate: schedule[i] ? schedule[i].toISOString() : w.scheduledDate,
-    daysToRace: schedule[i] ? dateDiffDays(schedule[i], RACE_DAY) : w.daysToRace,
-    label: schedule[i] ? formatDate(schedule[i]) : w.label,
+    scheduledDate: scheduleToFill[i] ? scheduleToFill[i].toISOString() : w.scheduledDate,
+    daysToRace: scheduleToFill[i] ? dateDiffDays(scheduleToFill[i], RACE_DAY) : w.daysToRace,
+    label: scheduleToFill[i] ? formatDate(scheduleToFill[i]) : w.label,
   }));
 }
 
