@@ -196,7 +196,7 @@ const TYPE_COLORS = {
   Race:         { bg:dark,      text:"#fff",    border:dark },
 };
 
-const FEEL_OPTS = ["\u{1F480} Died", "\ud83d\ude24 Hard", "\ud83d\ude0a Good", "\ud83d\ude0e Easy"];
+const FEEL_OPTS = ["💀 Died", "😤 Hard", "😊 Good", "😎 Easy"];
 const FEEL_COLS = ["#c0392b","#e67e22","#27ae60","#2980b9"];
 
 // ── API call ───────────────────────────────────────────────────────────────
@@ -285,7 +285,7 @@ async function adjustPlan({ name, paces, history, remainingPlan }) {
 
   const lastEntry = history[history.length-1];
   const needsAdjust = lastEntry?.status==="skipped" || lastEntry?.status==="incomplete" ||
-    lastEntry?.feel==="\u{1F480} Died" || lastEntry?.feel==="\ud83d\ude24 Hard";
+    lastEntry?.feel==="💀 Died" || lastEntry?.feel==="\ud83d\ude24 Hard";
 
   if (!needsAdjust) return remainingPlan; // No adjustment needed
 
@@ -837,7 +837,7 @@ function NextWorkoutCard({ workout, generating, onLog }) {
 function UnifiedTimeline({ history, plan }) {
   const [showAll, setShowAll] = useState(false);
   const feelColors = ["#c0392b","#e67e22","#27ae60","#2980b9"];
-  const feelOpts = ["\u{1F480} Died","\ud83d\ude24 Hard","\ud83d\ude0a Good","\ud83d\ude0e Easy"];
+  const feelOpts = ["💀 Died", "😤 Hard", "😊 Good", "😎 Easy"];
   const statusIcon = s => s==="completed"?"\u2705":s==="skipped"?"\u23ed":"\u26a0\ufe0f";
 
   // Upcoming = everything after first item (shown in NextWorkoutCard)
@@ -1080,7 +1080,7 @@ function PlanView({ runner, currentSlot, allProfiles, onReset }) {
 
     // Adjust plan if needed (skipped/incomplete/hard)
     const needsAdjust = data.status==="skipped" || data.status==="incomplete" ||
-      data.feel==="\u{1F480} Died" || data.feel==="\ud83d\ude24 Hard";
+      data.feel==="💀 Died" || data.feel==="\ud83d\ude24 Hard";
 
     if (needsAdjust && remainingPlan.length > 0) {
       setGenerating(true);
